@@ -177,6 +177,24 @@ d3.csv("assets/data/data.csv", state => {
         .attr("fill", "black");
 
     moveEllipses();
+
+    var toolTip = d3.tip()
+        .attr("class", "tooltip")
+        .offset([80, -60])
+        .html(function(d) {
+            return(`${d["state"]}<br>${xAxisStat}: ${d[xAxisStat]}<br>${yAxisStat}: ${d[yAxisStat]}`)
+        })
+
+    text.call(toolTip);
+
+    text.on("mouseover", function(data){
+        //console.log(data);
+        toolTip.show(data);
+    })
+    // onmouseout event
+    .on("mouseout", function(data, index) {
+        toolTip.hide(data);
+        });  
 });
 }
 
