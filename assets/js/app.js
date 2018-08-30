@@ -6,19 +6,23 @@ var xAxisHeight = 50;
 var topMargin = 50;
 var yAxisWidth = 75;
 var rightMargin = 20;
-var circleR = 8;
+var circleR = 7;
 var yAxisHeight = svgHeight - topMargin - xAxisHeight;
 var xAxisLength = svgWidth - rightMargin - yAxisWidth;
 
-xAxisElement = document.getElementById("x-select");
-yAxisElement = document.getElementById("y-select");
+var xAxisElement = document.getElementById("x-select");
+var yAxisElement = document.getElementById("y-select");
 
-xAxisStat = "poverty"
-yAxisStat = "poverty"
+var xAxisStat = "poverty"
+var yAxisStat = "poverty"
+var xAxisMoe = "povertyMoe"
+var yAxisMoe = "povertyMoe"
 
 var xScale = d3.scaleLinear()
 var yScale = d3.scaleLinear()
-    
+var ZoomXScale = xScale;
+var ZoomYScale = yScale;
+
 var xAxisCall = d3.axisBottom()
 var yAxisCall = d3.axisLeft()
 
@@ -27,12 +31,42 @@ var svg = d3.select("#scatter")
             .attr("width", svgWidth)
             .attr("height", svgHeight);
 
+var view = svg.append("rect")
+    .attr("class", "view")
+    .attr("x", yAxisWidth)
+    .attr("y", xAxisHeight)
+    .attr("width", xAxisLength)
+    .attr("height", yAxisHeight)
+    .style("fill", "none");
+
 var yAxisGroup = svg.append("g")
             .attr("transform", `translate(${yAxisWidth},${topMargin})`);
 var xAxisGroup = svg.append("g")
             .attr("transform", `translate(${yAxisWidth},${(topMargin+yAxisHeight)})`);
-var circles = yAxisGroup.append("g").selectAll("circle");
+var ellipses = yAxisGroup.append("g").selectAll("ellipse");
 var text = yAxisGroup.append("g").selectAll("text");
+
+var zoom = d3.zoom()
+    .scaleExtent([1, 10])
+    .translateExtent([[0-xAxisLength, 0-yAxisHeight], [yAxisWidth + 2.0*xAxisLength, xAxisHeight + 2.0*yAxisHeight]])
+    .on("zoom", zoomed);
+
+svg.call(zoom);
+
+function zoomed() {
+
+    // view.attr("transform", d3.event.transform);
+    // ellipses.attr("transform", d3.event.transform);
+    // text.attr("transform", d3.event.transform)
+    ZoomXScale = d3.event.transform.rescaleX(xScale)
+    ZoomYScale = d3.event.transform.rescaleY(yScale)
+  
+    // update axes
+    xAxisGroup.call(xAxisCall.scale(ZoomXScale));
+    yAxisGroup.call(yAxisCall.scale(ZoomYScale));
+
+    moveEllipses();
+}
 
 var xAxisText = xAxisGroup.append("text")
     .attr("x", xAxisLength/2)
@@ -74,13 +108,26 @@ function scaleAxes() {
     xAxisGroup.call(xAxisCall);
 }
 
-function moveCircles() {
-    circles
-        .attr("cx", d => xScale(d[xAxisStat]))
-        .attr("cy", d => yScale(d[yAxisStat]))
+function moveEllipses() {
+    let xScaleGain = Math.abs((ZoomXScale(1) - ZoomXScale(0)));
+    let yScaleGain = Math.abs((ZoomYScale(1) - ZoomYScale(0)));
+    const Moe = {
+        "poverty": (d => d["povertyMoe"]),
+        "age": (d => d["ageMoe"]),
+        "income": (d => d["incomeMoe"]),
+        "healthcare": (d => (d["healthcareHigh"] - d["healthcareLow"])/2),
+        "obesity": (d => (d["obesityHigh"] -d["obesityLow"])/2),
+        "smokes": (d => (d["smokesHigh"] -d["smokesLow"])/2)
+    }
+
+    ellipses
+        .attr("cx", d => ZoomXScale(d[xAxisStat]))
+        .attr("cy", d => ZoomYScale(d[yAxisStat]))
+        .attr("rx", d => xScaleGain * Moe[xAxisStat](d))
+        .attr("ry", d => yScaleGain * Moe[yAxisStat](d))
     text
-        .attr("x", d => xScale(d[xAxisStat]))
-        .attr("y", d => yScale(d[yAxisStat]))
+        .attr("x", d => ZoomXScale(d[xAxisStat]))
+        .attr("y", d => ZoomYScale(d[yAxisStat]))
 }
 
 function insertOption(element, s){
@@ -108,33 +155,57 @@ d3.csv("assets/data/data.csv", state => {
     }).then(data => {
     
     scaleAxes();
-
-    circles = circles.data(data)
+    ellipses = ellipses.data(data)
         .enter()
-        .append("circle")        
-        .attr("r", circleR)
-        .attr("fill", "blue");
+        .append("ellipse")
+        .attr("rx", circleR)
+        .attr("ry", circleR)
+        .attr("fill", "skyblue")
+        .attr("stroke-width", "1")
+        .attr("stroke", "black")
+        .attr("opacity", "0.5");
     
     text = text.data(data)
         .enter()
         .append("text")
         .attr("dy", "0.4em")
+        .attr("dx", 0)
         .text(d => d.abbr)
         .attr("text-anchor", "middle")
-        .attr("font-size", "8px")
-        .attr("fill", "white");
+        .attr("font-size", "10px")
+        .attr("font-weight", "bold")
+        .attr("fill", "black");
 
-    moveCircles();
+    moveEllipses();
 });
 }
 
 getData();
+
 function axisChange(){
+
     xAxisStat = xAxisElement.value;
     yAxisStat = yAxisElement.value;
     scaleAxes();
-    moveCircles();
+    resetted();
 }
 
+function resetted() {
+    svg
+    //.transition()
+    //    .duration(750)
+        .call(zoom.transform, d3.zoomIdentity);
+    ZoomXScale = xScale
+    ZoomYScale = yScale
+
+    // update axes
+    xAxisGroup.call(xAxisCall.scale(ZoomXScale));
+    yAxisGroup.call(yAxisCall.scale(ZoomYScale));
+
+    moveEllipses();      
+  }
+  
 xAxisElement.addEventListener("change", axisChange);
 yAxisElement.addEventListener("change", axisChange);
+d3.select("button")
+    .on("click", resetted);
